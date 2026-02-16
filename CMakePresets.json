@@ -2,8 +2,8 @@
   "version": 2,
   "configurePresets": [
     {
-      "name": "vs2022-static",
-      "generator": "Visual Studio 17 2022",
+      "name": "vs2026-static",
+      "generator": "Visual Studio 18 2026",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",

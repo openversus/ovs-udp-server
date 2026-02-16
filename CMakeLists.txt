@@ -9,7 +9,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(BUILD_SHARED_LIBS OFF)
 
 if(MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    #set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 endif()
 
 if(WIN32)
@@ -30,6 +31,10 @@ file(GLOB SOURCES src/*.cpp)
 file(GLOB_RECURSE HEADERS include/*.h include/*.hpp)
 
 add_executable(rollback-server ${SOURCES} ${HEADERS})
+if(MSVC)
+set_property(TARGET rollback-server PROPERTY
+  MSVC_RUNTIME_LIBRARY "MultiThreaded")
+endif()
 
 source_group(
   TREE "${CMAKE_CURRENT_SOURCE_DIR}/include"

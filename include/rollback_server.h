@@ -19,24 +19,64 @@
 #include <functional>
 #include "threadSafeMap.h"
 
+namespace util
+{
+    inline std::string getEnvVar(const std::string& varName)
+    {
+        std::string returnString = std::string();
+        char* env_p;
+
+#ifdef _WIN32
+        size_t requiredSize = 0;
+        errno_t err = _dupenv_s(&env_p, &requiredSize, varName.c_str());
+
+        if (err != 0 || env_p == nullptr)
+        {
+            return returnString;
+        }
+
+        returnString = std::string(_strdup(env_p));
+        free(env_p);  // Don't forget to free the allocated memory
+#else
+        env_p = std::getenv(varName.c_str());
+        if (env_p != nullptr)
+        {
+            returnString = std::string(env_p);
+        }
+#endif
+        return returnString;
+    }
+
+#ifdef _WIN32
+    inline std::string hostname = getEnvVar("COMPUTERNAME");
+#else
+    inline std::string hostname = getEnvVar("HOSTNAME");
+#endif
+    inline std::string serviceName = "RollbackServer";
+    inline std::string logPrefix = "[" + hostname + "." + serviceName + "]: ";
+}
+
 namespace rollback
 {
-
     using asio::ip::udp;
     using namespace asio::experimental::awaitable_operators;
     using namespace std::chrono;
 
+    inline std::string logPrefix = util::logPrefix;
+    //std::string hostname = "";
+
+
     // HTTP match configuration structures
-    struct MVSIPlayer {
+    struct OVSPlayer {
         uint16_t player_index;
         std::string ip;
         bool is_host;
     };
 
-    struct MVSIMatchConfig {
+    struct OVSMatchConfig {
         uint8_t max_players;
         uint32_t match_duration;
-        std::vector<MVSIPlayer> players;
+        std::vector<OVSPlayer> players;
     };
 
     // Structure to hold player information
@@ -112,11 +152,35 @@ namespace rollback
         RollbackServer(uint16_t port = GAME_SERVER_PORT, int maxPlayers = MAX_PLAYERS);
         ~RollbackServer();
 
+        struct OVSEndpoints
+        {
+            const std::string RegisterPath = "/ovs_register";
+            const std::string EndMatchPath = "/ovs_end_match";
+        };
+
+        struct MVSIEndpoints
+        {
+            const std::string RegisterPath = "/mvsi_register";
+            const std::string EndMatchPath = "/mvsi_end_match";
+        };
+
+        struct URLEndpoints
+        {
+            const OVSEndpoints OVS;
+            const MVSIEndpoints MVSI;
+        };
+
+        std::string baseURL;
+        bool isOVS = false;
+        bool isMVSI = false;
+        URLEndpoints Endpoints;
+        std::string getBaseURLFromEnv();
         void start();
         void stop();
 
     private:
         std::vector<std::thread> worker_threads_;
+
         // Network methods
         std::vector<std::shared_ptr<MatchState>> active_ping_matches_;
         std::mutex active_ping_mutex_;
@@ -171,7 +235,7 @@ namespace rollback
             const ServerMessageVariant& payload);
 
         // Fetch match config from HTTP server
-        std::optional<MVSIMatchConfig> fetchMatchConfigFromServer(const std::string& matchId, const std::string& key);
+        std::optional<OVSMatchConfig> fetchMatchConfigFromServer(const std::string& matchId, const std::string& key);
 
 
         void sendEndMatch(const std::string& matchId, const std::string& key);

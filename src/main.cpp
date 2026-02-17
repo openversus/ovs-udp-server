@@ -18,6 +18,8 @@ int main(int argc, char *argv[])
     uint16_t port = rollback::GAME_SERVER_PORT;
     int maxPlayers = rollback::MAX_PLAYERS;
 
+    std::string prefix = util::logPrefix;
+
     if (argc > 1)
     {
         try
@@ -26,7 +28,7 @@ int main(int argc, char *argv[])
         }
         catch (...)
         {
-            std::cerr << "Invalid port number. Using default: " << port << std::endl;
+            std::cerr << prefix << "Invalid port number. Using default: " << port << std::endl;
         }
     }
 
@@ -37,13 +39,13 @@ int main(int argc, char *argv[])
             maxPlayers = std::stoi(argv[2]);
             if (maxPlayers <= 0 || maxPlayers > 4)
             {
-                std::cerr << "Max players must be between 1 and 4. Using default: " << maxPlayers << std::endl;
+                std::cerr << prefix << "Max players must be between 1 and 4. Using default: " << maxPlayers << std::endl;
                 maxPlayers = rollback::MAX_PLAYERS;
             }
         }
         catch (...)
         {
-            std::cerr << "Invalid max players. Using default: " << maxPlayers << std::endl;
+            std::cerr << prefix << "Invalid max players. Using default: " << maxPlayers << std::endl;
         }
     }
 
@@ -57,7 +59,7 @@ int main(int argc, char *argv[])
         rollback::RollbackServer server(port, maxPlayers);
         server.start();
 
-        std::cout << "Server running. Press Ctrl+C to stop." << std::endl;
+        std::cout << prefix << "Server running. Press Ctrl+C to stop." << std::endl;
 
         // Wait for termination signal
         while (g_signal_status == 0)
@@ -65,12 +67,12 @@ int main(int argc, char *argv[])
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        std::cout << "Shutting down server..." << std::endl;
+        std::cout << prefix << "Shutting down server..." << std::endl;
         server.stop();
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << prefix << "Error: " << e.what() << std::endl;
         return 1;
     }
 

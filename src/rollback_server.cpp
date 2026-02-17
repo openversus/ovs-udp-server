@@ -1,4 +1,4 @@
-﻿#include "rollback_server.h"
+#include "rollback_server.h"
 #include "compression.h"
 #include <iomanip>
 #include <sstream>
@@ -6,6 +6,8 @@
 #include <chrono>
 #include <algorithm>
 #include <iostream>
+#include <cstdlib>
+#include <stdexcept>
 #include <format>
 
 #include <curl/curl.h>
@@ -27,8 +29,36 @@ constexpr uint8_t DISCONECT_TIMEOUT = 30;
 
 namespace rollback
 {
-
 	using namespace std::chrono;
+
+	std::string RollbackServer::getBaseURLFromEnv()
+	{
+        std::string url = util::getEnvVar("OVS_SERVER");
+        this->isOVS = !url.empty();
+
+		if (url.empty())
+		{
+            this->isOVS = false;
+			std::cerr << logPrefix << "Warning: OVS_SERVER environment variable not set, checking for \"mvsi_server\" environment variable." << std::endl;
+			url = util::getEnvVar("mvsi_server");
+            this->isMVSI = !url.empty();
+		}
+
+		if (!url.empty() && url.back() == '/')
+		{
+			url.pop_back(); // Remove trailing slash if present
+			return url;
+		}
+		else
+		{
+			if (!this->isOVS && !this->isMVSI)
+			{
+				std::cerr << logPrefix << "Warning: Neither OVS_SERVER nor mvsi_server environment variables are set, cannot continue." << std::endl;
+			}
+		}
+
+        return url;
+    }
 
 	RollbackServer::RollbackServer(uint16_t port, int maxPlayers)
 		: io_context_(),
@@ -37,18 +67,25 @@ namespace rollback
 		running_(false)
 	{
 
-		std::cout << "Initializing rollback server on port " << port << std::endl;
+        this->baseURL = getBaseURLFromEnv();
+
+		if (this->baseURL.empty())
+		{
+			throw std::runtime_error("No base URL is configured for the rollback server. Please set the OVS_SERVER environment variable.");
+        }
+
+		std::cout << logPrefix << "Initializing rollback server on port " << port << std::endl;
 		curl_global_init(CURL_GLOBAL_DEFAULT);
 #ifdef _WIN32
 		// Request 1ms timer resolution for more precise timing
 		MMRESULT result = timeBeginPeriod(1);
 		if (result == TIMERR_NOERROR)
 		{
-			std::cout << "Successfully set timer resolution to 1ms" << std::endl;
+			std::cout << logPrefix << "Successfully set timer resolution to 1ms" << std::endl;
 		}
 		else
 		{
-			std::cerr << "Failed to set timer resolution to 1ms" << std::endl;
+			std::cerr << logPrefix << "Failed to set timer resolution to 1ms" << std::endl;
 		}
 #endif
 	}
@@ -77,11 +114,13 @@ namespace rollback
 						io_context_.run();
 					}
 					catch (const std::exception& e) {
-						std::cerr << "Exception in io_context thread: " << e.what() << std::endl;
+						std::cerr << logPrefix << "Exception in io_context thread: " << e.what() << std::endl;
 					} });
 		}
 
-		std::cout << "Rollback server started" << std::endl;
+        std::string serverType = this->isOVS ? "OVS" : (this->isMVSI ? "MVSI" : "Unknown");
+		std::cout << logPrefix << "Rollback server started" << std::endl;
+        std::cout << logPrefix << "Match data will be fetched from and reported to " << serverType << " server at: " << this->baseURL << std::endl;
 	}
 
 	void RollbackServer::stop()
@@ -102,7 +141,7 @@ namespace rollback
 		std::error_code ec;
 		socket_.close(ec);
 
-		std::cout << "Rollback server stopped" << std::endl;
+		std::cout << logPrefix << "Rollback server stopped" << std::endl;
 	}
 
 	asio::awaitable<void> RollbackServer::runUdpServer()
@@ -126,7 +165,7 @@ namespace rollback
 			}
 			catch (const std::exception& e)
 			{
-				std::cerr << "Error in UDP server: " << e.what() << std::endl;
+				std::cerr << logPrefix << "Error in UDP server: " << e.what() << std::endl;
 				if (!running_)
 					break;
 			}
@@ -254,7 +293,7 @@ namespace rollback
 					std::unique_lock lock(player->mutex);
 					player->disconnected = true;
 				}
-				std::cout << "Player index " << player->playerIndex << " sent Disconnecting message" << std::endl;
+				std::cout << logPrefix << "Player index " << player->playerIndex << " sent Disconnecting message" << std::endl;
 				break;
 			}
 			default:
@@ -263,7 +302,7 @@ namespace rollback
 		}
 		catch (const std::exception& e)
 		{
-			std::cerr << "Error handling message: " << e.what() << std::endl;
+			std::cerr << logPrefix << "Error handling message: " << e.what() << std::endl;
 		}
 
 		co_return;
@@ -293,10 +332,10 @@ namespace rollback
 		if (!match)
 		{
 			// --- New logic: Fetch match config from HTTP server ---
-			std::cout << "New Match : " << matchData.matchId << std::endl;
+			std::cout << logPrefix << "New Match : " << matchData.matchId << std::endl;
 			auto configOpt = fetchMatchConfigFromServer(matchData.matchId, matchData.key);
 			if (!configOpt.has_value()) {
-				std::cerr << "Failed to fetch match config from server" << std::endl;
+				std::cerr << logPrefix << "Failed to fetch match config from server" << std::endl;
 				return nullptr;
 			}
 			const auto& config = configOpt.value();
@@ -345,7 +384,7 @@ namespace rollback
 			match->players.insert_or_assign(key, newPlayer);
 			players_.insert_or_assign(key, newPlayer);
 		}
-		std::cout << "Player index " << payload.playerData.playerIndex << " joined" << std::endl;
+		std::cout << logPrefix << "Player index " << payload.playerData.playerIndex << " joined" << std::endl;
 
 		// Send connection reply
 		NewConnectionReplyPayload replyPayload;
@@ -381,7 +420,7 @@ namespace rollback
 			std::shared_ptr<MatchState> match;
 			const std::chrono::milliseconds intervalMs{ 50 };
 		};
-		std::cout << "Starting Ping Phase" << std::endl;
+		std::cout << logPrefix << "Starting Ping Phase" << std::endl;
 		auto context = std::make_shared<PingContext>();
 		context->match = match; // Store a copy of the match
 
@@ -410,7 +449,7 @@ namespace rollback
 					co_await broadcastPlayersConfiguration(context->match);
 				}
 				catch (const std::exception& e) {
-					std::cerr << "Exception in ping phase: " << e.what() << std::endl;
+					std::cerr << logPrefix << "Exception in ping phase: " << e.what() << std::endl;
 				} }, asio::detached);
 	}
 
@@ -444,7 +483,7 @@ namespace rollback
 
 	asio::awaitable<void> RollbackServer::broadcastPlayersConfiguration(std::shared_ptr<MatchState> match)
 	{
-		std::cout << "broadcastPlayersConfiguration" << std::endl;
+		std::cout << logPrefix << "broadcastPlayersConfiguration" << std::endl;
 		auto playersSnapshot = match->players.snapshot();
 		for (const auto& p : playersSnapshot)
 		{
@@ -662,7 +701,7 @@ namespace rollback
 			player->hasNewFrame = false;
 			if (player->smoothRift > 1 || player->smoothRift < -1 || player->smoothedPing > 254)
 			{
-				std::cout << "PIndex:" << player->playerIndex << " PING:" << player->ping << " RIFT:" << player->smoothRift << " RAWRIFT:" << player->rift << " clientFrame:" << predictedClientFrame << " serverFrame:" << serverFrame << std::endl;
+				std::cout << logPrefix << "PIndex:" << player->playerIndex << " PING:" << player->ping << " RIFT:" << player->smoothRift << " RAWRIFT:" << player->rift << " clientFrame:" << predictedClientFrame << " serverFrame:" << serverFrame << std::endl;
 			}
 		}
 	}
@@ -736,7 +775,7 @@ namespace rollback
 				}
 				// Remove match from matches_ map
 				matches_.erase(match->matchId);
-				std::cout << "Match " << match->matchId << " cleaned up (all players disconnected)" << std::endl;
+				std::cout << logPrefix << "Match " << match->matchId << " cleaned up (all players disconnected)" << std::endl;
 		
 				break; // Exit tick loop
 			}
@@ -795,7 +834,7 @@ namespace rollback
 			catch (const std::system_error& e)
 			{
 				// Handle timer cancellation or errors
-				std::cerr << "Timer error: " << e.what() << std::endl;
+				std::cerr << logPrefix << "Timer error: " << e.what() << std::endl;
 				break;
 			}
 
@@ -821,7 +860,7 @@ namespace rollback
 				auto monitorDuration = monitorEnd - monitorStart;
 				auto avgTickTime = monitorDuration / tickCount;
 
-				std::cout << "  Average tick interval: "
+				std::cout << logPrefix << "  Average tick interval: "
 					<< std::chrono::duration_cast<std::chrono::microseconds>(avgTickTime).count() << std::endl;
 
 				// Reset monitoring variables
@@ -855,7 +894,7 @@ namespace rollback
 					if (!player->disconnected && (now - player->lastInputTime > std::chrono::seconds(DISCONECT_TIMEOUT)))
 					{
 						player->disconnected = true;
-						std::cout << "Player index " << player->playerIndex << " timed out (no input > 20s)" << std::endl;
+						std::cout << logPrefix << "Player index " << player->playerIndex << " timed out (no input > 20s)" << std::endl;
 						continue;
 					}
 					if (player->disconnected)
@@ -1074,7 +1113,7 @@ namespace rollback
 		}
 		catch (const std::system_error& e)
 		{
-			std::cerr << "Send failed for player " << player->playerIndex << ": " << e.what() << std::endl;
+			std::cerr << logPrefix << "Send failed for player " << player->playerIndex << ": " << e.what() << std::endl;
 			player->disconnected = true;
 			co_return 0;
 		}
@@ -1082,17 +1121,10 @@ namespace rollback
 		co_return header.sequence;
 	}
 
-	std::optional<MVSIMatchConfig> RollbackServer::fetchMatchConfigFromServer(const std::string& matchId, const std::string& key)
+	std::optional<OVSMatchConfig> RollbackServer::fetchMatchConfigFromServer(const std::string& matchId, const std::string& key)
 	{
-		std::string base_url;
-		if (const char* env_p = std::getenv("mvsi_server")) {
-			base_url = env_p;
-		}
-		else {
-			std::cerr << "mvsi_server environment variable not set!" << std::endl;
-			return std::nullopt;
-		}
-		std::string url = base_url + "/mvsi_register";
+        std::string path = this->isOVS ? this->Endpoints.OVS.RegisterPath : this->Endpoints.MVSI.RegisterPath;
+        std::string url = this->baseURL + path;
 
 		nlohmann::json req_json;
 		req_json["matchId"] = matchId;
@@ -1101,7 +1133,7 @@ namespace rollback
 
 		CURL* curl = curl_easy_init();
 		if (!curl) {
-			std::cerr << "Failed to init curl" << std::endl;
+			std::cerr << logPrefix << "Failed to init curl" << std::endl;
 			return std::nullopt;
 		}
 		struct curl_slist* headers = nullptr;
@@ -1120,20 +1152,20 @@ namespace rollback
 		curl_slist_free_all(headers);
 		curl_easy_cleanup(curl);
 		if (res != CURLE_OK) {
-			std::cerr << "Failed to POST to " << url << ": " << curl_easy_strerror(res) << std::endl;
+			std::cerr << logPrefix << "Failed to POST to " << url << ": " << curl_easy_strerror(res) << std::endl;
 			return std::nullopt;
 		}
 		nlohmann::json resp_json = nlohmann::json::parse(response, nullptr, false);
 		if (resp_json.is_discarded()) {
-			std::cerr << "Invalid JSON from mvsi_register" << std::endl;
+			std::cerr << logPrefix << "Invalid JSON from " << this->Endpoints.OVS.RegisterPath << std::endl;
 			return std::nullopt;
 		}
-		MVSIMatchConfig config;
+		OVSMatchConfig config;
 		config.max_players = resp_json.value("max_players", 2);
 		config.match_duration = resp_json.value("match_duration", 36000);
 		if (resp_json.contains("players")) {
 			for (const auto& p : resp_json["players"]) {
-				MVSIPlayer player;
+				OVSPlayer player;
 				player.player_index = p.value("player_index", 0);
 				player.ip = p.value("ip", "");
 				player.is_host = p.value("is_host", false);
@@ -1145,15 +1177,8 @@ namespace rollback
 
 	void RollbackServer::sendEndMatch(const std::string& matchId, const std::string& key)
 	{
-		std::string base_url;
-		if (const char* env_p = std::getenv("mvsi_server")) {
-			base_url = env_p;
-		}
-		else {
-			std::cerr << "mvsi_server environment variable not set!" << std::endl;
-			return;
-		}
-		std::string url = base_url + "/mvsi_end_match";
+		std::string path = this->isOVS ? this->Endpoints.OVS.EndMatchPath : this->Endpoints.MVSI.EndMatchPath;
+		std::string url = this->baseURL + path;
 
 		nlohmann::json req_json;
 		req_json["matchId"] = matchId;
@@ -1162,7 +1187,7 @@ namespace rollback
 
 		CURL* curl = curl_easy_init();
 		if (!curl) {
-			std::cerr << "Failed to init curl" << std::endl;
+			std::cerr << logPrefix << "Failed to init curl" << std::endl;
 			return;
 		}
 		struct curl_slist* headers = nullptr;
@@ -1181,7 +1206,7 @@ namespace rollback
 		curl_slist_free_all(headers);
 		curl_easy_cleanup(curl);
 		if (res != CURLE_OK) {
-			std::cerr << "Failed to POST to " << url << ": " << curl_easy_strerror(res) << std::endl;
+			std::cerr << logPrefix << "Failed to POST to " << url << ": " << curl_easy_strerror(res) << std::endl;
 			return;
 		}
 		return;

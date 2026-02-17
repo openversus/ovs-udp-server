@@ -1,0 +1,114 @@
+services:
+  ovs-distroless-rollback1: &ovs-distroless-rollback1
+    image: ovs-rollback-server:2026-02-17-distroless
+    build:
+      context: .
+      dockerfile: Dockerfile
+    deploy:
+      resources:
+        limits:
+          cpus: '6'
+    entrypoint: ["/rollback-server", "57000"]
+    environment:
+      OVS_SERVER: http://testing.openversus.org:8000
+    ports:
+      - "57000:57000/udp"
+    restart: unless-stopped
+
+  ovs-distroless-rollback2: &ovs-distroless-rollback2
+    <<: *ovs-distroless-rollback1
+    depends_on:
+      - ovs-distroless-rollback1
+    entrypoint: ["/rollback-server", "57001"]
+    ports:
+      - "57001:57001/udp"
+  ovs-distroless-rollback3:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57002"]
+    ports:
+      - "57002:57002/udp"
+  ovs-distroless-rollback4:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57003"]
+    ports:
+      - "57003:57003/udp"
+  ovs-distroless-rollback5:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57004"]
+    ports:
+      - "57004:57004/udp"
+  ovs-distroless-rollback6:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57005"]
+    ports:
+      - "57005:57005/udp"
+  ovs-distroless-rollback7:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57006"]
+    ports:
+      - "57006:57006/udp"
+  ovs-distroless-rollback8:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57007"]
+    ports:
+      - "57007:57007/udp"
+  ovs-distroless-rollback9:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57008"]
+    ports:
+      - "57008:57008/udp"
+  ovs-distroless-rollback10:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57009"]
+    ports:
+      - "57009:57009/udp"
+  ovs-distroless-rollback11:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57010"]
+    ports:
+      - "57010:57010/udp"
+  ovs-distroless-rollback12:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57011"]
+    ports:
+      - "57011:57011/udp"
+  ovs-distroless-rollback13:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57012"]
+    ports:
+      - "57012:57012/udp"
+  ovs-distroless-rollback14:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57013"]
+    ports:
+      - "57013:57013/udp"
+  ovs-distroless-rollback15:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57014"]
+    ports:
+      - "57014:57014/udp"
+  ovs-distroless-rollback16:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57015"]
+    ports:
+      - "57015:57015/udp"
+  ovs-distroless-rollback17:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57016"]
+    ports:
+      - "57016:57016/udp"
+  ovs-distroless-rollback18:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57017"]
+    ports:
+      - "57017:57017/udp"
+  ovs-distroless-rollback19:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57018"]
+    ports:
+      - "57018:57018/udp"
+  ovs-distroless-rollback20:
+    <<: *ovs-distroless-rollback2
+    entrypoint: ["/rollback-server", "57019"]
+    ports:
+      - "57019:57019/udp"

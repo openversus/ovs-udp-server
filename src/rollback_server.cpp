@@ -1129,6 +1129,7 @@ namespace rollback
 		nlohmann::json req_json;
 		req_json["matchId"] = matchId;
 		req_json["key"] = key;
+		req_json["hostname"] = util::hostname;
 		std::string req_body = req_json.dump();
 
 		CURL* curl = curl_easy_init();
@@ -1183,6 +1184,7 @@ namespace rollback
 		nlohmann::json req_json;
 		req_json["matchId"] = matchId;
 		req_json["key"] = key;
+		req_json["hostname"] = util::hostname;
 		std::string req_body = req_json.dump();
 
 		CURL* curl = curl_easy_init();
